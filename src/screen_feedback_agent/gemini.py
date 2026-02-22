@@ -1,10 +1,14 @@
 """Gemini API integration for video analysis."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import google.generativeai as genai
+
+from .snapshots import Snapshot
 
 
 @dataclass
@@ -78,17 +82,19 @@ Respond with structured Markdown:
 def analyze_video(
     video_path: Path,
     transcription: str,
+    snapshots: list[Snapshot] | None = None,
     project_context: str | None = None,
     verbose: bool = False,
 ) -> AnalysisOutput:
     """Analyze video using Gemini Vision.
-    
+
     Args:
         video_path: Path to condensed video
         transcription: Whisper transcription text
+        snapshots: Optional list of snap keyword screenshots
         project_context: Optional project README/structure
         verbose: Print debug output
-        
+
     Returns:
         Structured analysis output
     """
@@ -96,46 +102,92 @@ def analyze_video(
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable not set")
-    
+
     genai.configure(api_key=api_key)
-    
-    # Upload video
-    if verbose:
-        print(f"Uploading video: {video_path}")
-    
-    video_file = genai.upload_file(path=str(video_path))
-    
-    # Wait for processing
-    import time
-    while video_file.state.name == "PROCESSING":
+
+    if snapshots:
+        # Use multimodal prompt with snapshots
         if verbose:
-            print("Waiting for video processing...")
-        time.sleep(2)
-        video_file = genai.get_file(video_file.name)
-    
-    if video_file.state.name == "FAILED":
-        raise RuntimeError(f"Video processing failed: {video_file.state.name}")
-    
-    # Build prompt
-    prompt = ANALYSIS_PROMPT.format(
-        transcription=transcription or "[No transcription available]",
-        project_context=project_context or "[No project context provided]",
-    )
-    
+            print(f"Building multimodal prompt with {len(snapshots)} snapshots")
+        prompt_parts = build_multimodal_prompt(
+            video_path, transcription, snapshots, project_context,
+        )
+    else:
+        # Upload video and build simple prompt
+        if verbose:
+            print(f"Uploading video: {video_path}")
+        video_file = genai.upload_file(path=str(video_path))
+
+        # Wait for processing
+        import time
+        while video_file.state.name == "PROCESSING":
+            if verbose:
+                print("Waiting for video processing...")
+            time.sleep(2)
+            video_file = genai.get_file(video_file.name)
+
+        if video_file.state.name == "FAILED":
+            raise RuntimeError(f"Video processing failed: {video_file.state.name}")
+
+        prompt = ANALYSIS_PROMPT.format(
+            transcription=transcription or "[No transcription available]",
+            project_context=project_context or "[No project context provided]",
+        )
+        prompt_parts = [video_file, prompt]
+
     # Generate analysis
     model = genai.GenerativeModel("gemini-3.0-flash")
-    response = model.generate_content([video_file, prompt])
-    
-    # Cleanup uploaded file
-    genai.delete_file(video_file.name)
-    
+    response = model.generate_content(prompt_parts)
+
     # Parse response
     return parse_analysis_response(response.text)
 
 
+def build_multimodal_prompt(
+    video_path: Path,
+    transcription: str,
+    snapshots: list[Snapshot],
+    project_context: str | None = None,
+) -> list:
+    """Build Gemini prompt with video + snapshot images.
+
+    Creates a multimodal prompt that includes the video file,
+    any snapshot images captured at "snap" keywords, and the
+    analysis instructions.
+
+    Args:
+        video_path: Path to the condensed video
+        transcription: Full transcription text
+        snapshots: List of Snapshot objects with images
+        project_context: Optional project context
+
+    Returns:
+        List of prompt parts for Gemini generate_content()
+    """
+    prompt_parts: list = []
+
+    # Add video
+    video_file = genai.upload_file(path=str(video_path))
+    prompt_parts.append(video_file)
+
+    # Add snapshots with context
+    for snap in snapshots:
+        prompt_parts.append(f"\n--- SNAPSHOT at {snap.timestamp:.1f}s ---")
+        prompt_parts.append(f"User said: '{snap.context}'")
+        prompt_parts.append(genai.upload_file(path=str(snap.image_path)))
+
+    # Add analysis instructions
+    prompt_parts.append(ANALYSIS_PROMPT.format(
+        transcription=transcription or "[No transcription available]",
+        project_context=project_context or "[No project context provided]",
+    ))
+
+    return prompt_parts
+
+
 def parse_analysis_response(text: str) -> AnalysisOutput:
     """Parse Gemini response into structured output.
-    
+
     TODO: Implement proper parsing in E3-S3
     """
     # Placeholder - just return raw text as summary
