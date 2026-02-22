@@ -123,7 +123,7 @@ def analyze_video(
     )
     
     # Generate analysis
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-3.0-flash")
     response = model.generate_content([video_file, prompt])
     
     # Cleanup uploaded file
