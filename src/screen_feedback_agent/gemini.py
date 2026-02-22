@@ -8,6 +8,7 @@ from pathlib import Path
 
 import google.generativeai as genai
 
+from .audio import SpeechSegment
 from .snapshots import Snapshot
 
 
@@ -30,122 +31,153 @@ class AnalysisOutput:
     questions: list[Task] = field(default_factory=list)
 
 
-ANALYSIS_PROMPT = """You are analyzing a screen recording where a user reviews software and comments on bugs and desired changes.
+ENHANCED_ANALYSIS_PROMPT = """
+You are a senior software engineer analyzing a screen recording to extract
+PRECISE coding tasks. The user is reviewing an application and describing
+bugs or desired features.
 
-The user navigates through the application while verbally noting issues and suggestions. Your task is to extract actionable coding tasks from this review.
+## Video Context
+{video_description}
 
-## Transcription
-{transcription}
+## Transcription with Timestamps
+{timestamped_transcription}
+
+## Screenshots (when user said "snap")
+{snapshot_descriptions}
 
 ## Project Context
 {project_context}
 
-## Instructions
-Watch the video carefully and extract:
+## Analysis Instructions
 
-1. **BUGS** - Issues the user encountered or mentioned
-2. **ENHANCEMENTS** - Features or changes the user requested  
-3. **QUESTIONS** - Unclear items that need clarification
+For EACH issue or feature request, provide:
 
-For each item provide:
-- **Title**: Short, descriptive name
-- **Description**: What needs to change and why
-- **Priority**: High (blocking/critical), Medium (should fix), Low (nice to have)
-- **Location**: File/component if visible or mentioned
-- **Suggested Approach**: Brief implementation hint if obvious
+### 1. EXACT LOCATION
+- UI element name (button text, menu item, icon type)
+- Position on screen (top-left, sidebar, header, etc.)
+- Screenshot reference if available ("See snapshot at 12.3s")
+
+### 2. CURRENT STATE
+- What the UI looks like NOW
+- What happens when interacting with it
+- Any visible text/labels
+
+### 3. DESIRED STATE
+- Exactly what should change
+- Expected behavior after fix
+- Visual mockup description if needed
+
+### 4. IMPLEMENTATION SPEC
+```
+File: [exact file path if known, or likely location]
+Component: [component name]
+Changes:
+- Line X: Change Y to Z
+- Add new function: [signature]
+- CSS: [specific style changes]
+```
+
+### 5. ACCEPTANCE TEST
+```
+GIVEN [precondition]
+WHEN [action]
+THEN [expected result]
+```
+
+### 6. AGENT PROMPT
+Write a complete prompt that could be given to Claude Code to implement this:
+```
+[Ready-to-use prompt for coding agent]
+```
+
+---
 
 ## Output Format
-Respond with structured Markdown:
 
-# Summary
-[2-3 sentence overview of the review]
+Respond with a markdown document containing each task in the format above.
+Be EXTREMELY specific. Vague descriptions are useless.
 
-# Bugs
-## 1. [Title] — Priority: [High/Medium/Low]
-**Description:** ...
-**Location:** ...
-**Suggested Fix:** ...
+Examples of BAD output:
+- "Add a settings menu" (no location, no details)
+- "Make the sidebar collapsible" (no implementation spec)
 
-# Enhancements
-## 1. [Title] — Priority: [High/Medium/Low]
-**Description:** ...
-**Acceptance Criteria:**
-- ...
-
-# Questions
-## 1. [Title]
-**Context:** ...
-**Clarification Needed:** ...
+Examples of GOOD output:
+- "Add dropdown menu to '.workspace-header' div, triggered by clicking the workspace name. Menu items: 'Settings' (links to /settings), 'Account' (shows email), 'Logout' (calls auth.signOut())"
+- "Add collapse button to '#sidebar-container', position: absolute top-right. On click: animate width from 240px to 48px, show hamburger icon, persist state to localStorage key 'sidebar-collapsed'"
 """
 
+# Keep legacy prompt for backward compatibility
+ANALYSIS_PROMPT = ENHANCED_ANALYSIS_PROMPT
 
-def analyze_video(
-    video_path: Path,
-    transcription: str,
-    snapshots: list[Snapshot] | None = None,
-    project_context: str | None = None,
-    verbose: bool = False,
-) -> AnalysisOutput:
-    """Analyze video using Gemini Vision.
+
+def format_timestamped_transcription(segments: list[SpeechSegment]) -> str:
+    """Format transcription with timestamps for context.
 
     Args:
-        video_path: Path to condensed video
-        transcription: Whisper transcription text
-        snapshots: Optional list of snap keyword screenshots
-        project_context: Optional project README/structure
-        verbose: Print debug output
+        segments: List of SpeechSegment objects with timing info
 
     Returns:
-        Structured analysis output
+        Formatted string with timestamps, e.g. "[0.0s - 5.0s] Hello world"
     """
-    # Configure API
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable not set")
+    if not segments:
+        return "[No transcription available]"
 
-    genai.configure(api_key=api_key)
+    lines = []
+    for seg in segments:
+        timestamp = f"[{seg.start:.1f}s - {seg.end:.1f}s]"
+        lines.append(f"{timestamp} {seg.text}")
+    return "\n".join(lines)
 
-    if snapshots:
-        # Use multimodal prompt with snapshots
-        if verbose:
-            print(f"Building multimodal prompt with {len(snapshots)} snapshots")
-        prompt_parts = build_multimodal_prompt(
-            video_path, transcription, snapshots, project_context,
-        )
-    else:
-        # Upload video and build simple prompt
-        if verbose:
-            print(f"Uploading video: {video_path}")
-        video_file = genai.upload_file(path=str(video_path))
 
-        # Wait for processing
-        import time
-        while video_file.state.name == "PROCESSING":
-            if verbose:
-                print("Waiting for video processing...")
-            time.sleep(2)
-            video_file = genai.get_file(video_file.name)
+def format_snapshot_descriptions(snapshots: list[Snapshot]) -> str:
+    """Describe snapshots for text context in the prompt.
 
-        if video_file.state.name == "FAILED":
-            raise RuntimeError(f"Video processing failed: {video_file.state.name}")
+    Args:
+        snapshots: List of Snapshot objects
 
-        prompt = ANALYSIS_PROMPT.format(
-            transcription=transcription or "[No transcription available]",
-            project_context=project_context or "[No project context provided]",
-        )
-        prompt_parts = [video_file, prompt]
+    Returns:
+        Formatted description of all snapshots
+    """
+    if not snapshots:
+        return "No snapshots captured."
 
-    # Generate analysis
-    model = genai.GenerativeModel("gemini-3.0-flash")
-    response = model.generate_content(prompt_parts)
+    lines = ["User captured the following screenshots by saying 'snap':"]
+    for i, snap in enumerate(snapshots, 1):
+        lines.append(f"\n**Snapshot {i}** (at {snap.timestamp:.1f}s)")
+        lines.append(f"Context: \"{snap.context}\"")
+        lines.append(f"[Image {i} attached below]")
 
-    # Parse response
-    return parse_analysis_response(response.text)
+    return "\n".join(lines)
+
+
+def build_enhanced_prompt(
+    segments: list[SpeechSegment],
+    snapshots: list[Snapshot],
+    project_context: str | None = None,
+    video_description: str = "Screen recording of user reviewing an application",
+) -> str:
+    """Build the enhanced text-only prompt with all context.
+
+    Args:
+        segments: Speech segments with timestamps and text
+        snapshots: Snapshot objects from snap keywords
+        project_context: Optional project README/structure
+        video_description: Description of the video content
+
+    Returns:
+        Formatted prompt string
+    """
+    return ENHANCED_ANALYSIS_PROMPT.format(
+        video_description=video_description,
+        timestamped_transcription=format_timestamped_transcription(segments),
+        snapshot_descriptions=format_snapshot_descriptions(snapshots),
+        project_context=project_context or "[No project context provided]",
+    )
 
 
 def build_multimodal_prompt(
     video_path: Path,
-    transcription: str,
+    segments: list[SpeechSegment],
     snapshots: list[Snapshot],
     project_context: str | None = None,
 ) -> list:
@@ -153,11 +185,11 @@ def build_multimodal_prompt(
 
     Creates a multimodal prompt that includes the video file,
     any snapshot images captured at "snap" keywords, and the
-    analysis instructions.
+    enhanced analysis instructions.
 
     Args:
         video_path: Path to the condensed video
-        transcription: Full transcription text
+        segments: Speech segments with timestamps and text
         snapshots: List of Snapshot objects with images
         project_context: Optional project context
 
@@ -176,13 +208,99 @@ def build_multimodal_prompt(
         prompt_parts.append(f"User said: '{snap.context}'")
         prompt_parts.append(genai.upload_file(path=str(snap.image_path)))
 
-    # Add analysis instructions
-    prompt_parts.append(ANALYSIS_PROMPT.format(
-        transcription=transcription or "[No transcription available]",
-        project_context=project_context or "[No project context provided]",
+    # Add enhanced analysis instructions
+    prompt_parts.append(build_enhanced_prompt(
+        segments, snapshots, project_context,
     ))
 
     return prompt_parts
+
+
+def analyze_video(
+    video_path: Path,
+    transcription: str,
+    segments: list[SpeechSegment] | None = None,
+    snapshots: list[Snapshot] | None = None,
+    project_context: str | None = None,
+    verbose: bool = False,
+) -> AnalysisOutput:
+    """Analyze video using Gemini Vision.
+
+    Args:
+        video_path: Path to condensed video
+        transcription: Whisper transcription text
+        segments: Optional speech segments for enhanced prompt
+        snapshots: Optional list of snap keyword screenshots
+        project_context: Optional project README/structure
+        verbose: Print debug output
+
+    Returns:
+        Structured analysis output
+    """
+    # Configure API
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable not set")
+
+    genai.configure(api_key=api_key)
+
+    if segments and snapshots:
+        # Use full multimodal prompt with snapshots and enhanced template
+        if verbose:
+            print(f"Building multimodal prompt with {len(snapshots)} snapshots")
+        prompt_parts = build_multimodal_prompt(
+            video_path, segments, snapshots, project_context,
+        )
+    elif segments:
+        # Use enhanced prompt without snapshots
+        if verbose:
+            print(f"Uploading video: {video_path}")
+        video_file = genai.upload_file(path=str(video_path))
+
+        import time
+        while video_file.state.name == "PROCESSING":
+            if verbose:
+                print("Waiting for video processing...")
+            time.sleep(2)
+            video_file = genai.get_file(video_file.name)
+
+        if video_file.state.name == "FAILED":
+            raise RuntimeError(f"Video processing failed: {video_file.state.name}")
+
+        prompt = build_enhanced_prompt(
+            segments, [], project_context,
+        )
+        prompt_parts = [video_file, prompt]
+    else:
+        # Fallback: simple prompt with transcription string
+        if verbose:
+            print(f"Uploading video: {video_path}")
+        video_file = genai.upload_file(path=str(video_path))
+
+        import time
+        while video_file.state.name == "PROCESSING":
+            if verbose:
+                print("Waiting for video processing...")
+            time.sleep(2)
+            video_file = genai.get_file(video_file.name)
+
+        if video_file.state.name == "FAILED":
+            raise RuntimeError(f"Video processing failed: {video_file.state.name}")
+
+        prompt = ENHANCED_ANALYSIS_PROMPT.format(
+            video_description="Screen recording of user reviewing an application",
+            timestamped_transcription=transcription or "[No transcription available]",
+            snapshot_descriptions="No snapshots captured.",
+            project_context=project_context or "[No project context provided]",
+        )
+        prompt_parts = [video_file, prompt]
+
+    # Generate analysis
+    model = genai.GenerativeModel("gemini-3.0-flash")
+    response = model.generate_content(prompt_parts)
+
+    # Parse response
+    return parse_analysis_response(response.text)
 
 
 def parse_analysis_response(text: str) -> AnalysisOutput:

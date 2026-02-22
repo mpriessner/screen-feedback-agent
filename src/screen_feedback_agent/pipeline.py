@@ -74,10 +74,11 @@ def run_pipeline(
     if project_path:
         project_context = load_project_context(project_path)
 
-    # Step 5: Analyze with Gemini
+    # Step 5: Analyze with Gemini (enhanced prompt with segments + snapshots)
     analysis = analyze_video(
         video_path=condensed_video,
         transcription=transcription,
+        segments=speech_segments,
         snapshots=snapshots,
         project_context=project_context,
         verbose=verbose,
