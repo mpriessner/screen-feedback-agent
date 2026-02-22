@@ -79,6 +79,12 @@ User-friendly progress indication.
 
 ---
 
+## Story Files
+
+- [E4-S1: CLI Framework](../stories/E4-S1-cli-framework.md)
+- [E4-S2: Markdown Output Generator](../stories/E4-S2-markdown-output-generator.md)
+- [E4-S3: Progress & Logging](../stories/E4-S3-progress-and-logging.md)
+
 ## Definition of Done
 - `pip install` works
 - `sfa analyze` produces correct output

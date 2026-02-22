@@ -71,6 +71,12 @@ Reply "full report" for complete analysis.
 
 ---
 
+## Story Files
+
+- [E5-S1: Clawdbot Skill Package](../stories/E5-S1-clawdbot-skill-package.md)
+- [E5-S2: WhatsApp Media Handler](../stories/E5-S2-whatsapp-media-handler.md)
+- [E5-S3: Response Formatting](../stories/E5-S3-response-formatting.md)
+
 ## Definition of Done
 - Drop video in WhatsApp → get analysis
 - Works with Clawdbot skill system

@@ -75,6 +75,12 @@ Parse Gemini response into structured data.
 
 ---
 
+## Story Files
+
+- [E3-S1: Gemini Video Upload](../stories/E3-S1-gemini-video-upload.md)
+- [E3-S2: Analysis Prompt Engineering](../stories/E3-S2-analysis-prompt-engineering.md)
+- [E3-S3: Response Parsing](../stories/E3-S3-response-parsing.md)
+
 ## Definition of Done
 - Full pipeline: video → Gemini → parsed tasks
 - Response quality validated on 3+ test videos

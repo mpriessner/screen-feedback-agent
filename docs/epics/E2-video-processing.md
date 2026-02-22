@@ -62,6 +62,12 @@ Optimize video size for API upload while preserving readability.
 
 ---
 
+## Story Files
+
+- [E2-S1: Segment Extraction](../stories/E2-S1-segment-extraction.md)
+- [E2-S2: Segment Concatenation](../stories/E2-S2-segment-concatenation.md)
+- [E2-S3: Video Compression](../stories/E2-S3-video-compression.md)
+
 ## Definition of Done
 - End-to-end: segments → condensed video
 - Output plays correctly and is API-ready

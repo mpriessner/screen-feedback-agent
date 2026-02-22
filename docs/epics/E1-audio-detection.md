@@ -54,6 +54,12 @@ Merge adjacent speech segments and apply padding.
 
 ---
 
+## Story Files
+
+- [E1-S1: FFmpeg Silence Detection](../stories/E1-S1-ffmpeg-silence-detection.md)
+- [E1-S2: Whisper Transcription](../stories/E1-S2-whisper-transcription.md)
+- [E1-S3: Segment Merger](../stories/E1-S3-segment-merger.md)
+
 ## Definition of Done
 - All stories complete with tests
 - Can process a 10-minute video and output segment list
