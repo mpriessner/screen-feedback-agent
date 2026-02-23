@@ -32,78 +32,186 @@ class AnalysisOutput:
 
 
 ENHANCED_ANALYSIS_PROMPT = """
-You are a senior software engineer analyzing a screen recording to extract
-PRECISE coding tasks. The user is reviewing an application and describing
-bugs or desired features.
+You are a staff software engineer creating IMPLEMENTATION-READY specifications 
+from a screen recording. The user is reviewing their application and describing 
+bugs, issues, or features they want. Your job is to extract EVERY request and 
+turn it into a precise, actionable task.
 
-## Video Context
+Watch the video carefully. Listen to what the user says. Look at screenshots 
+captured when they said "snap". Create detailed specs that a coding agent can 
+implement WITHOUT asking clarifying questions.
+
+---
+
+## INPUT CONTEXT
+
+### Video Description
 {video_description}
 
-## Transcription with Timestamps
+### Timestamped Transcription
 {timestamped_transcription}
 
-## Screenshots (when user said "snap")
+### Screenshots (captured at "snap" keywords)
 {snapshot_descriptions}
 
-## Project Context
+### Project Context
 {project_context}
 
-## Analysis Instructions
+---
 
-For EACH issue or feature request, provide:
+## OUTPUT REQUIREMENTS
 
-### 1. EXACT LOCATION
-- UI element name (button text, menu item, icon type)
-- Position on screen (top-left, sidebar, header, etc.)
-- Screenshot reference if available ("See snapshot at 12.3s")
+You MUST output a structured markdown document with the following format.
+Follow this EXACTLY for EACH task identified in the video.
 
-### 2. CURRENT STATE
-- What the UI looks like NOW
-- What happens when interacting with it
-- Any visible text/labels
+---
 
-### 3. DESIRED STATE
-- Exactly what should change
-- Expected behavior after fix
-- Visual mockup description if needed
+# 🎯 OVERALL GOAL
 
-### 4. IMPLEMENTATION SPEC
+[One paragraph describing the high-level objective the user wants to achieve.
+What is the end state they're working towards? Why do they want these changes?]
+
+---
+
+# 📋 TASK LIST
+
+## Task 1: [Short descriptive title]
+
+### 🎯 Objective
+[One sentence: What specific problem does this solve or what feature does this add?]
+
+### 📍 Location (REQUIRED - be specific!)
+| Field | Value |
+|-------|-------|
+| **Timestamp in video** | [e.g., 12.3s - 15.7s] |
+| **Screenshot reference** | [e.g., "See snap at 17.5s" or "N/A"] |
+| **Screen area** | [e.g., "Right sidebar", "Top navigation bar", "Main content area below header"] |
+| **UI element** | [e.g., "The blue 'Save' button", "Table with class .data-grid", "Dropdown menu labeled 'Options'"] |
+| **Current visible text** | [Exact text visible on the element, if any] |
+
+### 📸 Visual Reference
+[Describe EXACTLY what you see in the video/screenshot at this moment. 
+Be specific: colors, positions, sizes, text content, surrounding elements.]
+
+### 🔄 Current State → Desired State
+
+**CURRENT:**
+[Describe precisely what happens NOW when interacting with this element.
+Include: appearance, behavior on click/hover, any animations, data shown.]
+
+**DESIRED:**
+[Describe precisely what SHOULD happen after the change.
+Include: new appearance, new behavior, new data, animations, edge cases.]
+
+### 🛠️ Implementation Specification
+
+```yaml
+type: [bug_fix | feature | enhancement | refactor]
+priority: [critical | high | medium | low]
+estimated_complexity: [trivial | simple | moderate | complex]
+
+files_likely_affected:
+  - path/to/file1.tsx  # [reason]
+  - path/to/file2.css  # [reason]
+
+components_involved:
+  - ComponentName  # [what changes needed]
+
+new_elements_needed:
+  - element: "[CSS selector or component name]"
+    type: "[div | button | modal | etc.]"
+    position: "[where in DOM / layout]"
+    styles: "[key CSS properties]"
+    behavior: "[click/hover/etc. handlers]"
+
+data_requirements:
+  - source: "[API endpoint | localStorage | props | state]"
+    format: "[describe data structure]"
+
+state_changes:
+  - "[describe any new state variables or state modifications]"
 ```
-File: [exact file path if known, or likely location]
-Component: [component name]
-Changes:
-- Line X: Change Y to Z
-- Add new function: [signature]
-- CSS: [specific style changes]
-```
 
-### 5. ACCEPTANCE TEST
-```
-GIVEN [precondition]
+### ✅ Acceptance Criteria
+
+```gherkin
+GIVEN [specific precondition - be exact about app state]
+WHEN [specific user action - be exact about what they do]
+THEN [specific expected result - be exact about what they see/experience]
+
+GIVEN [another scenario]
 WHEN [action]
-THEN [expected result]
+THEN [result]
 ```
 
-### 6. AGENT PROMPT
-Write a complete prompt that could be given to Claude Code to implement this:
-```
-[Ready-to-use prompt for coding agent]
+### 🤖 CLAUDE CODE PROMPT
+
+```markdown
+## Task: [Title]
+
+**Context:** [1-2 sentences about where this fits in the app]
+
+**Current behavior:** [What happens now]
+
+**Required changes:**
+
+1. [First specific change with exact details]
+   - File: `path/to/file.tsx`
+   - Find: [what to look for]
+   - Change: [what to modify]
+
+2. [Second specific change]
+   - File: `path/to/file.css`
+   - Add: [exact CSS or code to add]
+
+3. [Third specific change if needed]
+
+**Acceptance test:**
+- [ ] [Specific testable criterion]
+- [ ] [Another criterion]
+- [ ] [Edge case to handle]
+
+**Do NOT:**
+- [Common mistake to avoid]
+- [Another thing to avoid]
 ```
 
 ---
 
-## Output Format
+## Task 2: [Next task title]
 
-Respond with a markdown document containing each task in the format above.
-Be EXTREMELY specific. Vague descriptions are useless.
+[Repeat the same structure for each additional task]
 
-Examples of BAD output:
-- "Add a settings menu" (no location, no details)
-- "Make the sidebar collapsible" (no implementation spec)
+---
 
-Examples of GOOD output:
-- "Add dropdown menu to '.workspace-header' div, triggered by clicking the workspace name. Menu items: 'Settings' (links to /settings), 'Account' (shows email), 'Logout' (calls auth.signOut())"
-- "Add collapse button to '#sidebar-container', position: absolute top-right. On click: animate width from 240px to 48px, show hamburger icon, persist state to localStorage key 'sidebar-collapsed'"
+# 📊 SUMMARY
+
+| # | Task | Type | Priority | Complexity |
+|---|------|------|----------|------------|
+| 1 | [Title] | [type] | [priority] | [complexity] |
+| 2 | [Title] | [type] | [priority] | [complexity] |
+
+---
+
+## CRITICAL RULES
+
+1. **NO VAGUE DESCRIPTIONS** - Every field must have specific, concrete values
+2. **WATCH THE WHOLE VIDEO** - Don't miss any requests the user makes
+3. **USE SCREENSHOTS** - Reference snap screenshots with exact timestamps
+4. **INFER TECHNICAL DETAILS** - Look at the UI to guess component names, CSS classes, file paths
+5. **MULTIPLE TASKS = MULTIPLE SECTIONS** - Each distinct request gets its own Task section
+6. **CODING PROMPT MUST BE COPY-PASTEABLE** - Someone should be able to give it directly to Claude Code
+
+## EXAMPLES OF GOOD VS BAD
+
+❌ BAD: "Add a sidebar"
+✅ GOOD: "Add a collapsible sidebar to the right of .main-content, width 280px collapsed to 48px, containing a table of contents generated from h2 headings on the page, with smooth 200ms ease-out transition on hover"
+
+❌ BAD: "Fix the button"  
+✅ GOOD: "The 'Submit' button (button.primary-action in the form footer) should be disabled and show opacity 0.5 while the form is submitting, re-enable after response"
+
+❌ BAD: "Make it look better"
+✅ GOOD: "Increase padding on .card-container from 12px to 24px, add border-radius: 8px, add subtle box-shadow: 0 2px 8px rgba(0,0,0,0.1)"
 """
 
 # Keep legacy prompt for backward compatibility
@@ -296,7 +404,7 @@ def analyze_video(
         prompt_parts = [video_file, prompt]
 
     # Generate analysis
-    model = genai.GenerativeModel("gemini-3.0-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content(prompt_parts)
 
     # Parse response
